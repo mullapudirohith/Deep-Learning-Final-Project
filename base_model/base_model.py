@@ -1,15 +1,8 @@
-import os
-import shutil
-import tempfile
-
 import matplotlib.pyplot as plt
-import numpy as np
 from monai.apps import DecathlonDataset
 from monai.config import print_config
 from monai.data import DataLoader
-from monai.losses import DiceLoss, DiceCELoss
 from monai.metrics import DiceMetric
-from monai.networks.nets import UNet
 from monai.transforms import (
     Activations,
     AsChannelFirstd,
@@ -34,27 +27,12 @@ print("CUDA availability:", torch.cuda.is_available())
 print("device count: ", torch.cuda.device_count())
 print_config()
 
-# Define a new transform to convert brain tumor labels
-# Here we convert the multi-classes labels into multi-labels segmentation task in One-Hot format.
-# Setup data directory
-# You can specify a directory with the `MONAI_DATA_DIRECTORY` environment variable.
-# This allows you to save results and reuse downloads.
-# If not specified a temporary directory will be used.
 
 base_dir = './'
 print(base_dir)
 set_determinism(seed=0)
 
 class ConvertLabelsToMultiChannel(MapTransform):
-    """
-    Convert labels to multi channels based on brats classes:
-    label 1 is the peritumoral edema
-    label 2 is the GD-enhancing tumor
-    label 3 is the necrotic and non-enhancing tumor core
-    The possible classes are TC (Tumor core), WT (Whole tumor)
-    and ET (Enhancing tumor).
-
-    """
 
     def __call__(self, data):
         converted_data = dict(data)
@@ -68,12 +46,12 @@ class ConvertLabelsToMultiChannel(MapTransform):
                     np.logical_or(converted_data[key] == 2, converted_data[key] == 3), converted_data[key] == 1
                 )
             )
-            # label 2 is ET
+            # ET
             result.append(converted_data[key] == 2)
             converted_data[key] = np.stack(result, axis=0).astype(np.float32)
         return converted_data
 
-# Setup transforms for training and validation
+
 training_roi_size = [128, 128, 64]
 voxel_spacing = (1.5, 1.5, 2.0)
 
@@ -115,10 +93,6 @@ validation_transforms = Compose(
     ]
 )
 
-# Quickly load data with DecathlonDataset
-# Here we use `DecathlonDataset` to automatically download and extract the dataset.
-# It inherits MONAI `CacheDataset`, so we set `cache_num=100` to cache 100 items for training and use the defaut args to cache all the items for validation.
-
 cache_items = 8
 
 import ssl
@@ -137,7 +111,7 @@ train_dataset = DecathlonDataset(
     section="training",
     download=True,
     num_workers=0,
-    cache_num=cache_items, # it was 100 but we use larger volumes
+    cache_num=cache_items,
 )
 train_loader = DataLoader(train_dataset, batch_size=2, shuffle=True, num_workers=2)
 val_dataset = DecathlonDataset(
@@ -151,9 +125,7 @@ val_dataset = DecathlonDataset(
 )
 val_loader = DataLoader(val_dataset, batch_size=2, shuffle=False, num_workers=2)
 
-# Check data shape and visualize
 slice_index = 32
-# pick one image from DecathlonDataset to visualize and check the 4 channels
 print(f"image shape: {val_dataset[2]['image'].shape}")
 plt.figure("image", (24, 6))
 for i in range(4):
@@ -224,7 +196,6 @@ class Conv3DLayer(nn.Module):
         return self.final_activation(y)
 
 
-# green block in Fig.1
 class TransposeConv3DLayer(nn.Module):
     def __init__(self, in_channels, out_channels):
         super().__init__()
@@ -238,14 +209,6 @@ class TransposeConv3DLayer(nn.Module):
 
 class BlueLayer(nn.Module):
     def __init__(self, in_channels, out_channels, layers=1, conv_block=False):
-        """
-        blue box in Fig.1
-        Args:
-            in_channels: in channels of transpose convolution
-            out_channels: out channels of transpose convolution
-            layers: number of blue blocks, transpose convs
-            conv_block: whether to include a conv block after each transpose conv. deafaults to False
-        """
         super().__init__()
         self.blocks = nn.ModuleList([TransposeConv3DLayer(in_channels, out_channels),
                                      ])
@@ -279,13 +242,10 @@ def set_random_seed(seed, gpu=False):
     if gpu:
         torch.backends.cudnn.deterministic = True
 
-
-# from https://huggingface.co/transformers/_modules/transformers/modeling_utils.html
 def get_device_of_module(parameter: nn.Module):
     try:
         return next(parameter.parameters()).device
     except StopIteration:
-        # For nn.DataParallel compatibility in PyTorch 1.5
 
         def find_tensor_attributes(module: nn.Module) -> List[Tuple[str, Tensor]]:
             tuples = [(k, v) for k, v in module.__dict__.items() if torch.is_tensor(v)]
@@ -318,9 +278,6 @@ class Embedding3D(nn.Module):
         self.dropout = nn.Dropout(dropout)
 
     def forward(self, x):
-        """
-        x is a 5D tensor
-        """
         x = rearrange(self.patch_embeddings(x), 'b d x y z -> b (x y z) d')
         embeddings = self.dropout(self.position_embeddings(x))
         return embeddings
@@ -341,15 +298,6 @@ def multi_head_self_attention(q, k, v, scale_factor=1, mask=None):
 
 class MultiHeadAttention(nn.Module):
     def __init__(self, dim, heads=8, dim_head=None):
-        """
-        Implementation of multi-head attention layer of the original transformer model.
-        einsum and einops.rearrange is used whenever possible
-        Args:
-            dim: token's dimension, i.e. word embedding vector size
-            heads: the number of distinct representations to learn
-            dim_head: the dim of the head. In general dim_head<dim.
-            However, it may not necessary be (dim/heads)
-        """
         super().__init__()
         self.dim_head = (int(dim / heads)) if dim_head is None else dim_head
         _dim = self.dim_head * heads
@@ -360,39 +308,22 @@ class MultiHeadAttention(nn.Module):
 
     def forward(self, x, mask=None):
         assert x.dim() == 3
-        qkv = self.to_qvk(x)  # [batch, tokens, dim*3*heads ]
+        qkv = self.to_qvk(x)
 
-        # decomposition to q,v,k and cast to tuple
-        # the resulted shape before casting to tuple will be: [3, batch, heads, tokens, dim_head]
         q, k, v = tuple(rearrange(qkv, 'b t (d k h ) -> k b h t d ', k=3, h=self.heads))
 
         out = multi_head_self_attention(q, k, v, mask=mask, scale_factor=self.scale_factor)
 
-        # re-compose: merge heads with dim_head
+
         out = rearrange(out, "b h t d -> b t (h d)")
-        # Apply final linear transformation layer
         return self.W_0(out)
 
 
 class TransformerLayer(nn.Module):
-    """
-    Vanilla transformer block from the original paper "Attention is all you need"
-    Detailed analysis: https://theaisummer.com/transformer/
-    """
 
     def __init__(self, dim, heads=8, dim_head=None,
                  dim_linear_block=1024, dropout=0.1, activation=nn.GELU,
                  mhsa=None, prenorm=False):
-        """
-        Args:
-            dim: token's vector length
-            heads: number of heads
-            dim_head: if none dim/heads is used
-            dim_linear_block: the inner projection dim
-            dropout: probability of droppping values
-            mhsa: if provided you can change the vanilla self-attention block
-            prenorm: if the layer norm will be applied before the mhsa or after
-        """
         super().__init__()
         self.mhsa = mhsa if mhsa is not None else MultiHeadAttention(dim=dim, heads=heads, dim_head=dim_head)
         self.prenorm = prenorm
@@ -402,7 +333,7 @@ class TransformerLayer(nn.Module):
 
         self.linear = nn.Sequential(
             nn.Linear(dim, dim_linear_block),
-            activation(),  # nn.ReLU or nn.GELU
+            activation(),
             nn.Dropout(dropout),
             nn.Linear(dim_linear_block, dim),
             nn.Dropout(dropout)
@@ -439,29 +370,12 @@ class TransformerEncoder(nn.Module):
 
         return extract_layers
 
-
-# based on https://arxiv.org/abs/2103.10504
-# implementation is influenced by practical details missing in the paper that can be found
-# https://github.com/Project-MONAI/MONAI/blob/027947bf91ff0dfac94f472ed1855cd49e3feb8d/monai/networks/nets/unetr.py
 class UNETR(nn.Module):
     def __init__(self, img_shape=(128, 128, 128), input_dim=4, output_dim=3,
                  embed_dim=768, patch_size=16, num_heads=12, dropout=0.0,
                  ext_layers=[3, 6, 9, 12], norm='instance',
                  base_filters=16,
                  dim_linear_block=3072):
-        """
-        Args:
-            img_shape: volume shape, provided as a tuple
-            input_dim: input modalities/channels
-            output_dim: number of classes
-            embed_dim: transformer embed dim.
-            patch_size: the non-overlapping patches to be created
-            num_heads: for the transformer encoder
-            dropout: percentage for dropout
-            ext_layers: transformer layers to use their output
-            version: 'light' saves some parameters in the decoding part
-            norm: batch or instance norm for the conv blocks
-        """
         super().__init__()
         self.num_layers = 12
         self.input_dim = input_dim
@@ -485,21 +399,20 @@ class UNETR(nn.Module):
 
         self.init_conv = Conv3DLayer(input_dim, base_filters, double=True, norm=self.norm)
 
-        # blue blocks in Fig.1
         self.z3_blue_conv = BlueLayer(in_channels=embed_dim, out_channels=base_filters * 2, layers=3)
 
         self.z6_blue_conv = BlueLayer(in_channels=embed_dim, out_channels=base_filters * 4, layers=2)
 
         self.z9_blue_conv = BlueLayer(in_channels=embed_dim, out_channels=base_filters * 8, layers=1)
 
-        # Green blocks in Fig.1
+
         self.z12_deconv = TransposeConv3DLayer(embed_dim, base_filters * 8)
 
         self.z9_deconv = TransposeConv3DLayer(base_filters * 8, base_filters * 4)
         self.z6_deconv = TransposeConv3DLayer(base_filters * 4, base_filters * 2)
         self.z3_deconv = TransposeConv3DLayer(base_filters * 2, base_filters)
 
-        # Yellow blocks in Fig.1
+
         self.z9_conv = Conv3DLayer(base_filters * 8 * 2, base_filters * 8, double=True, norm=self.norm)
         self.z6_conv = Conv3DLayer(base_filters * 4 * 2, base_filters * 4, double=True, norm=self.norm)
         self.z3_conv = Conv3DLayer(base_filters * 2 * 2, base_filters * 2, double=True, norm=self.norm)
@@ -534,7 +447,7 @@ class UNETR(nn.Module):
         y = torch.cat([y, z6], dim=1)
         y = self.z6_conv(y)
 
-        # Green block for z3
+
         y = self.z6_deconv(y)
         # Concat + yellow conv
         y = torch.cat([y, z3], dim=1)
@@ -549,7 +462,7 @@ num_attention_heads = 10 # 12 normally
 embedding_dim = 512 # 768 normally
 
 import torch.nn as nn
-from monai.losses import DiceLoss, DiceCELoss
+from monai.losses import DiceCELoss
 
 # Wrap the model with DataParallel
 model = UNETR(img_shape=tuple(training_roi_size), input_dim=4, output_dim=3,
@@ -557,7 +470,6 @@ model = UNETR(img_shape=tuple(training_roi_size), input_dim=4, output_dim=3,
               ext_layers=[3, 6, 9, 12], norm='instance',
               base_filters=16, dim_linear_block=2048)
 
-device = torch.device("cuda")
 if torch.cuda.device_count() > 1:
     print(f"Using {torch.cuda.device_count()} GPUs")
     model = nn.DataParallel(model)
@@ -680,22 +592,6 @@ print(
     f" at epoch: {best_metric_epoch}"
 )
 
-
-# unet tutorial result: train completed, best_metric: 0.7537  at epoch: 160 # official tutorial
-# train completed, best_metric: 0.7660 at epoch: 170 # my run
-
-# self-attention-cv implementation of unetr
-# current epoch: 180 current mean dice: 0.7686 tc: 0.8116 wt: 0.8935 et: 0.6065
-# best mean dice: 0.7686 at epoch: 180
-
-# reduced version 50m params
-# current epoch: 180 current mean dice: 0.7693 tc: 0.8161 wt: 0.8922 et: 0.6057
-# best mean dice: 0.7693 at epoch: 180
-
-# unetr monai implementation
-# current epoch: 175 current mean dice: 0.7612 tc: 0.8122 wt: 0.8790 et: 0.5982
-
-# Plot the loss and metric
 
 plt.figure("train", (12, 6))
 plt.subplot(1, 2, 1)
