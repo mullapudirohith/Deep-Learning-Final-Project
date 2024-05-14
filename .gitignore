@@ -1,0 +1,4 @@
+/venv/
+/best_metric_model.pth
+/last.pth
+/.idea
