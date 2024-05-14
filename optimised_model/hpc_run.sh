@@ -18,6 +18,6 @@ singularity exec --nv \
 	    /scratch/work/public/singularity/cuda11.6.124-cudnn8.4.0.27-devel-ubuntu20.04.4.sif\
 	    /bin/bash -c "source /ext3/env.sh; 
 	    
-	    pip install -r requirements.txt
+	    pip install -r ../requirements.txt
 	    pip install torch torchvision torchaudio
 	    python3 optimized_model.py"

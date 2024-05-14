@@ -1,8 +1,15 @@
+import os
+import shutil
+import tempfile
+
 import matplotlib.pyplot as plt
+import numpy as np
 from monai.apps import DecathlonDataset
 from monai.config import print_config
 from monai.data import DataLoader
+from monai.losses import DiceLoss, DiceCELoss
 from monai.metrics import DiceMetric
+from monai.networks.nets import UNet
 from monai.transforms import (
     Activations,
     AsChannelFirstd,
@@ -23,25 +30,39 @@ from monai.transforms import (
 from monai.utils import set_determinism
 
 import torch
-
 print("CUDA availability:", torch.cuda.is_available())
 print("device count: ", torch.cuda.device_count())
 print_config()
+
+# Define a new transform to convert brain tumor labels
+# Here we convert the multi-classes labels into multi-labels segmentation task in One-Hot format.
+# Setup data directory
+# You can specify a directory with the `MONAI_DATA_DIRECTORY` environment variable.
+# This allows you to save results and reuse downloads.
+# If not specified a temporary directory will be used.
 
 base_dir = './'
 print(base_dir)
 set_determinism(seed=0)
 
-
 class ConvertLabelsToMultiChannel(MapTransform):
+    """
+    Convert labels to multi channels based on brats classes:
+    label 1 is the peritumoral edema
+    label 2 is the GD-enhancing tumor
+    label 3 is the necrotic and non-enhancing tumor core
+    The possible classes are TC (Tumor core), WT (Whole tumor)
+    and ET (Enhancing tumor).
+
+    """
 
     def __call__(self, data):
         converted_data = dict(data)
         for key in self.keys:
             result = []
-            # Merge label 2 and label 3 to construct TC
+            # merge label 2 and label 3 to construct TC
             result.append(np.logical_or(converted_data[key] == 2, converted_data[key] == 3))
-            # Merge labels 1, 2 and 3 to construct WT
+            # merge labels 1, 2 and 3 to construct WT
             result.append(
                 np.logical_or(
                     np.logical_or(converted_data[key] == 2, converted_data[key] == 3), converted_data[key] == 1
@@ -52,13 +73,13 @@ class ConvertLabelsToMultiChannel(MapTransform):
             converted_data[key] = np.stack(result, axis=0).astype(np.float32)
         return converted_data
 
-
+# Setup transforms for training and validation
 training_roi_size = [128, 128, 64]
 voxel_spacing = (1.5, 1.5, 2.0)
 
 train_transforms = Compose(
     [
-        # Load 4 Nifti images and stack them together
+        # load 4 Nifti images and stack them together
         LoadImaged(keys=["image", "label"]),
         AsChannelFirstd(keys="image"),
         ConvertLabelsToMultiChannel(keys="label"),
@@ -94,12 +115,12 @@ validation_transforms = Compose(
     ]
 )
 
-# Load data with DecathlonDataset
-# Here we use DecathlonDataset to automatically download and extract the dataset
-# set download to False (down below) if already downloaded as it might take a while to redownload (~7 Gigs)
+# Quickly load data with DecathlonDataset
+# Here we use `DecathlonDataset` to automatically download and extract the dataset.
+# It inherits MONAI `CacheDataset`, so we set `cache_num=100` to cache 100 items for training and use the defaut args to cache all the items for validation.
+
 cache_items = 8
 
-# for any ssl errors while downloading the dataset from s3 presigned url
 import ssl
 
 try:
@@ -107,7 +128,7 @@ try:
 except AttributeError:
     pass
 else:
-    ssl._create_default_https_context = _create_unverified_https_context
+        ssl._create_default_https_context = _create_unverified_https_context
 
 train_dataset = DecathlonDataset(
     root_dir=base_dir,
@@ -116,7 +137,7 @@ train_dataset = DecathlonDataset(
     section="training",
     download=True,
     num_workers=0,
-    cache_num=cache_items,
+    cache_num=cache_items, # it was 100 but we use larger volumes
 )
 train_loader = DataLoader(train_dataset, batch_size=2, shuffle=True, num_workers=2)
 val_dataset = DecathlonDataset(
@@ -130,7 +151,7 @@ val_dataset = DecathlonDataset(
 )
 val_loader = DataLoader(val_dataset, batch_size=2, shuffle=False, num_workers=2)
 
-# visualize
+# Check data shape and visualize
 slice_index = 32
 # pick one image from DecathlonDataset to visualize and check the 4 channels
 print(f"image shape: {val_dataset[2]['image'].shape}")
@@ -138,7 +159,7 @@ plt.figure("image", (24, 6))
 for i in range(4):
     plt.subplot(1, 4, i + 1)
     plt.title(f"image channel {i}")
-    plt.imshow(val_dataset[2]["image"][i, :, :, slice_index].detach().cpu(), cmap="gray")  #
+    plt.imshow(val_dataset[2]["image"][i, :, :, slice_index].detach().cpu(),  cmap="gray") #
 plt.show()
 plt.savefig("fig1.png")
 # also visualize the 3 channels label corresponding to this image
@@ -203,6 +224,7 @@ class Conv3DLayer(nn.Module):
         return self.final_activation(y)
 
 
+# green block in Fig.1
 class TransposeConv3DLayer(nn.Module):
     def __init__(self, in_channels, out_channels):
         super().__init__()
@@ -258,7 +280,7 @@ def set_random_seed(seed, gpu=False):
         torch.backends.cudnn.deterministic = True
 
 
-# Referred from https://huggingface.co/transformers/_modules/transformers/modeling_utils.html
+# from https://huggingface.co/transformers/_modules/transformers/modeling_utils.html
 def get_device_of_module(parameter: nn.Module):
     try:
         return next(parameter.parameters()).device
@@ -296,13 +318,16 @@ class Embedding3D(nn.Module):
         self.dropout = nn.Dropout(dropout)
 
     def forward(self, x):
+        """
+        x is a 5D tensor
+        """
         x = rearrange(self.patch_embeddings(x), 'b d x y z -> b (x y z) d')
         embeddings = self.dropout(self.position_embeddings(x))
         return embeddings
 
 
 def multi_head_self_attention(q, k, v, scale_factor=1, mask=None):
-    # return shape will be: [batch, heads, tokens, tokens]
+    # resulted shape will be: [batch, heads, tokens, tokens]
     scaled_dot_prod = torch.einsum('... i d , ... j d -> ... i j', q, k) * scale_factor
 
     if mask is not None:
@@ -310,11 +335,21 @@ def multi_head_self_attention(q, k, v, scale_factor=1, mask=None):
         scaled_dot_prod = scaled_dot_prod.masked_fill(mask, -np.inf)
 
     attention = torch.softmax(scaled_dot_prod, dim=-1)
+    # calc result per head
     return torch.einsum('... i j , ... j d -> ... i d', attention, v)
 
 
 class MultiHeadAttention(nn.Module):
     def __init__(self, dim, heads=8, dim_head=None):
+        """
+        Implementation of multi-head attention layer of the original transformer model.
+        einsum and einops.rearrange is used whenever possible
+        Args:
+            dim: token's dimension, i.e. word embedding vector size
+            heads: the number of distinct representations to learn
+            dim_head: the dim of the head. In general dim_head<dim.
+            However, it may not necessary be (dim/heads)
+        """
         super().__init__()
         self.dim_head = (int(dim / heads)) if dim_head is None else dim_head
         _dim = self.dim_head * heads
@@ -325,9 +360,14 @@ class MultiHeadAttention(nn.Module):
 
     def forward(self, x, mask=None):
         assert x.dim() == 3
-        qkv = self.to_qvk(x)
+        qkv = self.to_qvk(x)  # [batch, tokens, dim*3*heads ]
+
+        # decomposition to q,v,k and cast to tuple
+        # the resulted shape before casting to tuple will be: [3, batch, heads, tokens, dim_head]
         q, k, v = tuple(rearrange(qkv, 'b t (d k h ) -> k b h t d ', k=3, h=self.heads))
+
         out = multi_head_self_attention(q, k, v, mask=mask, scale_factor=self.scale_factor)
+
         # re-compose: merge heads with dim_head
         out = rearrange(out, "b h t d -> b t (h d)")
         # Apply final linear transformation layer
@@ -335,9 +375,24 @@ class MultiHeadAttention(nn.Module):
 
 
 class TransformerLayer(nn.Module):
+    """
+    Vanilla transformer block from the original paper "Attention is all you need"
+    Detailed analysis: https://theaisummer.com/transformer/
+    """
+
     def __init__(self, dim, heads=8, dim_head=None,
                  dim_linear_block=1024, dropout=0.1, activation=nn.GELU,
                  mhsa=None, prenorm=False):
+        """
+        Args:
+            dim: token's vector length
+            heads: number of heads
+            dim_head: if none dim/heads is used
+            dim_linear_block: the inner projection dim
+            dropout: probability of droppping values
+            mhsa: if provided you can change the vanilla self-attention block
+            prenorm: if the layer norm will be applied before the mhsa or after
+        """
         super().__init__()
         self.mhsa = mhsa if mhsa is not None else MultiHeadAttention(dim=dim, heads=heads, dim_head=dim_head)
         self.prenorm = prenorm
@@ -385,13 +440,28 @@ class TransformerEncoder(nn.Module):
         return extract_layers
 
 
-# Basic Implementation referred from https://arxiv.org/abs/2103.10504
+# based on https://arxiv.org/abs/2103.10504
+# implementation is influenced by practical details missing in the paper that can be found
+# https://github.com/Project-MONAI/MONAI/blob/027947bf91ff0dfac94f472ed1855cd49e3feb8d/monai/networks/nets/unetr.py
 class UNETR(nn.Module):
     def __init__(self, img_shape=(128, 128, 128), input_dim=4, output_dim=3,
                  embed_dim=768, patch_size=16, num_heads=12, dropout=0.0,
                  ext_layers=[3, 6, 9, 12], norm='instance',
                  base_filters=16,
                  dim_linear_block=3072):
+        """
+        Args:
+            img_shape: volume shape, provided as a tuple
+            input_dim: input modalities/channels
+            output_dim: number of classes
+            embed_dim: transformer embed dim.
+            patch_size: the non-overlapping patches to be created
+            num_heads: for the transformer encoder
+            dropout: percentage for dropout
+            ext_layers: transformer layers to use their output
+            version: 'light' saves some parameters in the decoding part
+            norm: batch or instance norm for the conv blocks
+        """
         super().__init__()
         self.num_layers = 12
         self.input_dim = input_dim
@@ -403,26 +473,41 @@ class UNETR(nn.Module):
         self.dropout = dropout
         self.ext_layers = ext_layers
         self.patch_dim = [int(x / patch_size) for x in img_shape]
+
         self.norm = nn.BatchNorm3d if norm == 'batch' else nn.InstanceNorm3d
+
         self.embed = Embedding3D(input_dim=input_dim, embed_dim=embed_dim,
-                                 cube_size=img_shape, patch_size=patch_size, dropout=dropout)
+                                  cube_size=img_shape, patch_size=patch_size, dropout=dropout)
+
         self.transformer = TransformerEncoder(embed_dim, num_heads,
                                               self.num_layers, dropout, ext_layers,
                                               dim_linear_block=dim_linear_block)
+
         self.init_conv = Conv3DLayer(input_dim, base_filters, double=True, norm=self.norm)
+
+        # blue blocks in Fig.1
         self.z3_blue_conv = BlueLayer(in_channels=embed_dim, out_channels=base_filters * 2, layers=3)
+
         self.z6_blue_conv = BlueLayer(in_channels=embed_dim, out_channels=base_filters * 4, layers=2)
+
         self.z9_blue_conv = BlueLayer(in_channels=embed_dim, out_channels=base_filters * 8, layers=1)
+
+        # Green blocks in Fig.1
         self.z12_deconv = TransposeConv3DLayer(embed_dim, base_filters * 8)
+
         self.z9_deconv = TransposeConv3DLayer(base_filters * 8, base_filters * 4)
         self.z6_deconv = TransposeConv3DLayer(base_filters * 4, base_filters * 2)
         self.z3_deconv = TransposeConv3DLayer(base_filters * 2, base_filters)
+
+        # Yellow blocks in Fig.1
         self.z9_conv = Conv3DLayer(base_filters * 8 * 2, base_filters * 8, double=True, norm=self.norm)
         self.z6_conv = Conv3DLayer(base_filters * 4 * 2, base_filters * 4, double=True, norm=self.norm)
         self.z3_conv = Conv3DLayer(base_filters * 2 * 2, base_filters * 2, double=True, norm=self.norm)
-        # output convolutions below
+        # out convolutions
         self.out_conv = nn.Sequential(
+            # last yellow conv block
             Conv3DLayer(base_filters * 2, base_filters, double=True, norm=self.norm),
+            # grey block, final classification layer
             nn.Conv3d(base_filters, output_dim, kernel_size=1, stride=1))
 
     def forward(self, x):
@@ -430,45 +515,56 @@ class UNETR(nn.Module):
         z3, z6, z9, z12 = map(lambda t: rearrange(t, 'b (x y z) d -> b d x y z',
                                                   x=self.patch_dim[0], y=self.patch_dim[1], z=self.patch_dim[2]),
                               self.transformer(transf_input))
+
+        # Blue convs
         z0 = self.init_conv(x)
         z3 = self.z3_blue_conv(z3)
         z6 = self.z6_blue_conv(z6)
         z9 = self.z9_blue_conv(z9)
+
+        # Green block for z12
         z12 = self.z12_deconv(z12)
+        # Concat + yellow conv
         y = torch.cat([z12, z9], dim=1)
         y = self.z9_conv(y)
+
+        # Green block for z6
         y = self.z9_deconv(y)
+        # Concat + yellow conv
         y = torch.cat([y, z6], dim=1)
         y = self.z6_conv(y)
+
+        # Green block for z3
         y = self.z6_deconv(y)
+        # Concat + yellow conv
         y = torch.cat([y, z3], dim=1)
         y = self.z3_conv(y)
+
         y = self.z3_deconv(y)
         y = torch.cat([y, z0], dim=1)
         return self.out_conv(y)
 
-
 device = torch.device("cuda")
-num_attention_heads = 10
-embedding_dim = 512
+num_attention_heads = 10 # 12 normally
+embedding_dim = 512 # 768 normally
 
+import torch.nn as nn
+from monai.losses import DiceLoss, DiceCELoss
+
+# Wrap the model with DataParallel
 model = UNETR(img_shape=tuple(training_roi_size), input_dim=4, output_dim=3,
               embed_dim=embedding_dim, patch_size=16, num_heads=num_attention_heads,
               ext_layers=[3, 6, 9, 12], norm='instance',
-              base_filters=16,
-              dim_linear_block=2048).to(device)
+              base_filters=16, dim_linear_block=2048)
 
-total_params = sum(p.numel() for p in model.parameters()) / 1000000
-print('Parameters in millions:', total_params)
+device = torch.device("cuda")
+if torch.cuda.device_count() > 1:
+    print(f"Using {torch.cuda.device_count()} GPUs")
+    model = nn.DataParallel(model)
+model = model.to(device)
 
-# Create Model, Loss, Optimizer, Scheduler, and Execute a typical PyTorch training process
-
-import torch.nn as nn
-from monai.losses import DiceCELoss
-from torch.optim.lr_scheduler import OneCycleLR
-
+# Loss and optimizer
 loss_function = DiceCELoss(to_onehot_y=False, sigmoid=True)
-
 optimizer = torch.optim.AdamW(model.parameters(), lr=1e-4, weight_decay=1e-5)
 
 max_epochs = 30
@@ -480,8 +576,6 @@ metric_values = []
 metric_values_tc = []
 metric_values_wt = []
 metric_values_et = []
-
-scheduler = OneCycleLR(optimizer, max_lr=1e-3, epochs=max_epochs, steps_per_epoch=len(train_loader))
 
 torch.cuda.empty_cache()
 
@@ -503,7 +597,6 @@ for epoch in range(max_epochs):
         loss = loss_function(outputs, labels)
         loss.backward()
         optimizer.step()
-        scheduler.step()
         epoch_loss += loss.item()
 
     epoch_loss /= step
@@ -528,7 +621,8 @@ for epoch in range(max_epochs):
                 )
                 val_outputs = model(val_inputs)
                 val_outputs = post_trans(val_outputs)
-                # compute overall mean dice (printed every 5 epochs below)
+
+                # compute overall mean dice
                 value, not_nans = dice_metric(y_pred=val_outputs, y=val_labels)
                 not_nans = not_nans.mean().item()
                 metric_count += not_nans
@@ -547,7 +641,7 @@ for epoch in range(max_epochs):
                 not_nans = not_nans.item()
                 metric_count_wt += not_nans
                 metric_sum_wt += value_wt.item() * not_nans
-                # mean dice for ET
+                # compute mean dice for ET
                 value_et, not_nans = dice_metric(
                     y_pred=val_outputs[:, 2:3], y=val_labels[:, 2:3]
                 )
@@ -585,6 +679,23 @@ print(
     f"train completed, best_metric: {best_metric:.4f}"
     f" at epoch: {best_metric_epoch}"
 )
+
+
+# unet tutorial result: train completed, best_metric: 0.7537  at epoch: 160 # official tutorial
+# train completed, best_metric: 0.7660 at epoch: 170 # my run
+
+# self-attention-cv implementation of unetr
+# current epoch: 180 current mean dice: 0.7686 tc: 0.8116 wt: 0.8935 et: 0.6065
+# best mean dice: 0.7686 at epoch: 180
+
+# reduced version 50m params
+# current epoch: 180 current mean dice: 0.7693 tc: 0.8161 wt: 0.8922 et: 0.6057
+# best mean dice: 0.7693 at epoch: 180
+
+# unetr monai implementation
+# current epoch: 175 current mean dice: 0.7612 tc: 0.8122 wt: 0.8790 et: 0.5982
+
+# Plot the loss and metric
 
 plt.figure("train", (12, 6))
 plt.subplot(1, 2, 1)
@@ -624,7 +735,8 @@ plt.plot(x, y, color="purple")
 plt.show()
 plt.savefig("fig4.png")
 
-# Save the model with best metric
+# Check best model output with the input image and label
+
 model.load_state_dict(
     torch.load(os.path.join(base_dir, "best_metric_model.pth"))
 )
@@ -639,7 +751,7 @@ with torch.no_grad():
         plt.title(f"image channel {i}")
         plt.imshow(val_dataset[6]["image"][i, :, :, 20].detach().cpu(), cmap="gray")
     plt.show()
-    plt.savefig("fig5.png")
+    plt.savefig("fig3.png")
     # visualize the 3 channels label corresponding to this image
     plt.figure("label", (18, 6))
     for i in range(3):

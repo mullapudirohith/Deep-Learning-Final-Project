@@ -1,0 +1,183 @@
+Defaulting to user installation because normal site-packages is not writeable
+Requirement already satisfied: torch in /ext3/miniconda3/envs/habitat/lib/python3.8/site-packages (1.13.1+cu116)
+Requirement already satisfied: torchvision in /ext3/miniconda3/envs/habitat/lib/python3.8/site-packages (0.14.1+cu116)
+Requirement already satisfied: torchaudio in /ext3/miniconda3/envs/habitat/lib/python3.8/site-packages (0.13.1+cu116)
+Requirement already satisfied: typing-extensions in /ext3/miniconda3/envs/habitat/lib/python3.8/site-packages (from torch) (4.7.1)
+Requirement already satisfied: numpy in /ext3/miniconda3/envs/habitat/lib/python3.8/site-packages (from torchvision) (1.24.4)
+Requirement already satisfied: requests in /ext3/miniconda3/envs/habitat/lib/python3.8/site-packages (from torchvision) (2.31.0)
+Requirement already satisfied: pillow!=8.3.*,>=5.3.0 in /ext3/miniconda3/envs/habitat/lib/python3.8/site-packages (from torchvision) (10.0.0)
+Requirement already satisfied: charset-normalizer<4,>=2 in /ext3/miniconda3/envs/habitat/lib/python3.8/site-packages (from requests->torchvision) (3.2.0)
+Requirement already satisfied: idna<4,>=2.5 in /ext3/miniconda3/envs/habitat/lib/python3.8/site-packages (from requests->torchvision) (3.4)
+Requirement already satisfied: urllib3<3,>=1.21.1 in /ext3/miniconda3/envs/habitat/lib/python3.8/site-packages (from requests->torchvision) (2.0.4)
+Requirement already satisfied: certifi>=2017.4.17 in /ext3/miniconda3/envs/habitat/lib/python3.8/site-packages (from requests->torchvision) (2023.11.17)
+Defaulting to user installation because normal site-packages is not writeable
+Requirement already satisfied: einops in /home/at5854/.local/lib/python3.8/site-packages (from -r requirements.txt (line 1)) (0.8.0)
+Requirement already satisfied: numpy in /ext3/miniconda3/envs/habitat/lib/python3.8/site-packages (from -r requirements.txt (line 2)) (1.24.4)
+Requirement already satisfied: monai==1.1.0 in /home/at5854/.local/lib/python3.8/site-packages (from -r requirements.txt (line 3)) (1.1.0)
+Requirement already satisfied: matplotlib in /ext3/miniconda3/envs/habitat/lib/python3.8/site-packages (from -r requirements.txt (line 4)) (3.2.2)
+Requirement already satisfied: tqdm in /home/at5854/.local/lib/python3.8/site-packages (from -r requirements.txt (line 5)) (4.66.4)
+Requirement already satisfied: torch>=1.8 in /ext3/miniconda3/envs/habitat/lib/python3.8/site-packages (from monai==1.1.0->-r requirements.txt (line 3)) (1.13.1+cu116)
+Requirement already satisfied: cycler>=0.10 in /ext3/miniconda3/envs/habitat/lib/python3.8/site-packages (from matplotlib->-r requirements.txt (line 4)) (0.11.0)
+Requirement already satisfied: kiwisolver>=1.0.1 in /ext3/miniconda3/envs/habitat/lib/python3.8/site-packages (from matplotlib->-r requirements.txt (line 4)) (1.4.4)
+Requirement already satisfied: pyparsing!=2.0.4,!=2.1.2,!=2.1.6,>=2.0.1 in /ext3/miniconda3/envs/habitat/lib/python3.8/site-packages (from matplotlib->-r requirements.txt (line 4)) (3.1.1)
+Requirement already satisfied: python-dateutil>=2.1 in /ext3/miniconda3/envs/habitat/lib/python3.8/site-packages (from matplotlib->-r requirements.txt (line 4)) (2.8.2)
+Requirement already satisfied: six>=1.5 in /ext3/miniconda3/envs/habitat/lib/python3.8/site-packages (from python-dateutil>=2.1->matplotlib->-r requirements.txt (line 4)) (1.16.0)
+Requirement already satisfied: typing-extensions in /ext3/miniconda3/envs/habitat/lib/python3.8/site-packages (from torch>=1.8->monai==1.1.0->-r requirements.txt (line 3)) (4.7.1)
+CUDA availability: True
+device count:  1
+MONAI version: 1.1.0
+Numpy version: 1.24.4
+Pytorch version: 1.13.1+cu116
+MONAI flags: HAS_EXT = False, USE_COMPILED = False, USE_META_DICT = False
+MONAI rev id: a2ec3752f54bfc3b40e7952234fbeb5452ed63e3
+MONAI __file__: /home/at5854/.local/lib/python3.8/site-packages/monai/__init__.py
+
+Optional dependencies:
+Pytorch Ignite version: NOT INSTALLED or UNKNOWN VERSION.
+Nibabel version: 5.2.1
+scikit-image version: NOT INSTALLED or UNKNOWN VERSION.
+Pillow version: 10.0.0
+Tensorboard version: NOT INSTALLED or UNKNOWN VERSION.
+gdown version: NOT INSTALLED or UNKNOWN VERSION.
+TorchVision version: 0.14.1+cu116
+tqdm version: 4.66.4
+lmdb version: NOT INSTALLED or UNKNOWN VERSION.
+psutil version: NOT INSTALLED or UNKNOWN VERSION.
+pandas version: 2.0.3
+einops version: 0.8.0
+transformers version: NOT INSTALLED or UNKNOWN VERSION.
+mlflow version: NOT INSTALLED or UNKNOWN VERSION.
+pynrrd version: NOT INSTALLED or UNKNOWN VERSION.
+
+For details about installing the optional dependencies, please visit:
+    https://docs.monai.io/en/latest/installation.html#installing-the-recommended-dependencies
+
+./
+2024-05-12 18:28:18,873 - INFO - Verified 'Task01_BrainTumour.tar', md5: 240a19d752f0d9e9101544901065d872.
+2024-05-12 18:28:18,874 - INFO - File exists: Task01_BrainTumour.tar, skipped downloading.
+2024-05-12 18:28:18,875 - INFO - Non-empty folder exists in Task01_BrainTumour, skipped extracting.
+/home/at5854/.local/lib/python3.8/site-packages/monai/utils/deprecate_utils.py:107: FutureWarning: <class 'monai.transforms.utility.array.AsChannelFirst'>: Class `AsChannelFirst` has been deprecated since version 0.8. please use MetaTensor data type and monai.transforms.EnsureChannelFirst instead.
+  warn_deprecated(obj, msg, warning_category)
+Loading dataset:   0%|          | 0/8 [00:00<?, ?it/s]/home/at5854/.local/lib/python3.8/site-packages/monai/transforms/spatial/array.py:571: UserWarning: `data_array` is not of type MetaTensor, assuming affine to be identity.
+  warnings.warn("`data_array` is not of type MetaTensor, assuming affine to be identity.")
+Loading dataset:  12%|█▎        | 1/8 [00:02<00:16,  2.38s/it]Loading dataset:  25%|██▌       | 2/8 [00:03<00:11,  1.88s/it]Loading dataset:  38%|███▊      | 3/8 [00:05<00:08,  1.77s/it]Loading dataset:  50%|█████     | 4/8 [00:07<00:06,  1.67s/it]Loading dataset:  62%|██████▎   | 5/8 [00:08<00:04,  1.62s/it]Loading dataset:  75%|███████▌  | 6/8 [00:10<00:03,  1.59s/it]Loading dataset:  88%|████████▊ | 7/8 [00:11<00:01,  1.59s/it]Loading dataset: 100%|██████████| 8/8 [00:13<00:00,  1.54s/it]Loading dataset: 100%|██████████| 8/8 [00:13<00:00,  1.64s/it]
+Loading dataset:   0%|          | 0/8 [00:00<?, ?it/s]Loading dataset:  12%|█▎        | 1/8 [00:01<00:11,  1.69s/it]Loading dataset:  25%|██▌       | 2/8 [00:03<00:09,  1.56s/it]Loading dataset:  38%|███▊      | 3/8 [00:04<00:07,  1.56s/it]Loading dataset:  50%|█████     | 4/8 [00:06<00:06,  1.54s/it]Loading dataset:  62%|██████▎   | 5/8 [00:07<00:04,  1.54s/it]Loading dataset:  75%|███████▌  | 6/8 [00:09<00:03,  1.52s/it]Loading dataset:  88%|████████▊ | 7/8 [00:10<00:01,  1.51s/it]Loading dataset: 100%|██████████| 8/8 [00:12<00:00,  1.50s/it]Loading dataset: 100%|██████████| 8/8 [00:12<00:00,  1.53s/it]image shape: torch.Size([4, 128, 128, 64])
+label shape: torch.Size([3, 128, 128, 64])
+(128, 128, 64)
+Parameters in millions: 49.667123
+----------
+epoch 1/30
+
+epoch 1 average loss: 0.9900
+----------
+epoch 2/30
+epoch 2 average loss: 0.9750
+----------
+epoch 3/30
+epoch 3 average loss: 0.9653
+----------
+epoch 4/30
+epoch 4 average loss: 0.9533
+----------
+epoch 5/30
+epoch 5 average loss: 0.9378
+saved new best metric model
+current epoch: 5 current mean dice: 0.1217 tc: 0.1513 wt: 0.1458 et: 0.0655
+best mean dice: 0.1217 at epoch: 5
+----------
+epoch 6/30
+/home/at5854/.local/lib/python3.8/site-packages/monai/metrics/utils.py:219: UserWarning: y_pred should be a binarized tensor.
+  warnings.warn(f"{name} should be a binarized tensor.")
+epoch 6 average loss: 0.9196
+----------
+epoch 7/30
+epoch 7 average loss: 0.8976
+----------
+epoch 8/30
+epoch 8 average loss: 0.8715
+----------
+epoch 9/30
+epoch 9 average loss: 0.8418
+----------
+epoch 10/30
+epoch 10 average loss: 0.8104
+saved new best metric model
+current epoch: 10 current mean dice: 0.2772 tc: 0.3718 wt: 0.2921 et: 0.1630
+best mean dice: 0.2772 at epoch: 10
+----------
+epoch 11/30
+epoch 11 average loss: 0.7759
+----------
+epoch 12/30
+epoch 12 average loss: 0.7385
+----------
+epoch 13/30
+epoch 13 average loss: 0.7010
+----------
+epoch 14/30
+epoch 14 average loss: 0.6622
+----------
+epoch 15/30
+epoch 15 average loss: 0.6251
+saved new best metric model
+current epoch: 15 current mean dice: 0.4503 tc: 0.5295 wt: 0.5551 et: 0.2609
+best mean dice: 0.4503 at epoch: 15
+----------
+epoch 16/30
+epoch 16 average loss: 0.5915
+----------
+epoch 17/30
+epoch 17 average loss: 0.5596
+----------
+epoch 18/30
+epoch 18 average loss: 0.5332
+----------
+epoch 19/30
+epoch 19 average loss: 0.5112
+----------
+epoch 20/30
+epoch 20 average loss: 0.4933
+saved new best metric model
+current epoch: 20 current mean dice: 0.5792 tc: 0.6652 wt: 0.7221 et: 0.3464
+best mean dice: 0.5792 at epoch: 20
+----------
+epoch 21/30
+epoch 21 average loss: 0.4730
+----------
+epoch 22/30
+epoch 22 average loss: 0.4566
+----------
+epoch 23/30
+epoch 23 average loss: 0.4444
+----------
+epoch 24/30
+epoch 24 average loss: 0.4328
+----------
+epoch 25/30
+epoch 25 average loss: 0.4206
+saved new best metric model
+current epoch: 25 current mean dice: 0.6295 tc: 0.6885 wt: 0.7737 et: 0.4190
+best mean dice: 0.6295 at epoch: 25
+----------
+epoch 26/30
+epoch 26 average loss: 0.4044
+----------
+epoch 27/30
+epoch 27 average loss: 0.3883
+----------
+epoch 28/30
+epoch 28 average loss: 0.3752
+----------
+epoch 29/30
+epoch 29 average loss: 0.3642
+----------
+epoch 30/30
+epoch 30 average loss: 0.3630
+DL_copy.py:758: MatplotlibDeprecationWarning: Adding an axes using the same arguments as a previous axes currently reuses the earlier instance.  In a future version, a new instance will always be created and returned.  Meanwhile, this warning can be suppressed, and the future behavior ensured, by passing a unique label to each axes instance.
+  plt.subplot(1, 4, i + 1)
+DL_copy.py:766: MatplotlibDeprecationWarning: Adding an axes using the same arguments as a previous axes currently reuses the earlier instance.  In a future version, a new instance will always be created and returned.  Meanwhile, this warning can be suppressed, and the future behavior ensured, by passing a unique label to each axes instance.
+  plt.subplot(1, 3, i + 1)
+saved new best metric model
+current epoch: 30 current mean dice: 0.6857 tc: 0.7359 wt: 0.8173 et: 0.5024
+best mean dice: 0.6857 at epoch: 30
+train completed, best_metric: 0.6857 at epoch: 30
